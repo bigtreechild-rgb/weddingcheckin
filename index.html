@@ -50,6 +50,30 @@ header.app::after{
 }
 .mode-dot{width:7px;height:7px;border-radius:50%;background:var(--gold-soft)}
 .mode-chip.cloud .mode-dot{background:#7ED9A8;box-shadow:0 0 0 3px rgba(126,217,168,.25)}
+.hd-right{display:flex;flex-direction:column;align-items:flex-end;gap:6px}
+.op-chip{font-size:11px;font-weight:500;padding:4px 11px;border-radius:20px;background:rgba(255,255,255,.16);
+  border:1px solid rgba(255,255,255,.3);color:#fff;display:flex;align-items:center;gap:5px;max-width:140px}
+.op-chip span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.op-chip.unset{background:var(--gold);color:var(--wine-deep);border-color:var(--gold);font-weight:700}
+/* identify */
+.id-quick{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 4px}
+.id-quick button{padding:11px 16px;border-radius:12px;border:1px solid var(--line);background:var(--paper);font-size:15px;font-weight:500}
+.id-quick button:active{background:var(--gold-soft);border-color:var(--gold)}
+/* audit log */
+.log-item{display:flex;gap:11px;padding:11px 4px;border-bottom:1px solid var(--line)}
+.log-item:last-child{border-bottom:none}
+.log-op{flex-shrink:0;min-width:60px;font-size:12px;font-weight:600;color:var(--wine);padding-top:2px}
+.log-body{flex:1;min-width:0}
+.log-act{font-size:14px}
+.log-act .badge{font-size:11px;padding:1px 8px;border-radius:20px;margin-right:6px;font-weight:500}
+.badge.in{background:var(--green-soft);color:var(--green)}
+.badge.un{background:var(--red-soft);color:var(--red)}
+.badge.ed{background:#EEE7F0;color:#7A5A82}
+.badge.lt{background:#FCEFE0;color:#B07A2E}
+.badge.sy{background:var(--ivory);color:var(--muted)}
+.log-detail{font-size:12px;color:var(--muted);margin-top:2px}
+.log-time{flex-shrink:0;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;padding-top:2px}
+.who-stamp{font-size:12px;color:var(--muted);text-align:center;margin:-6px 0 12px}
 
 /* ---------- bottom nav ---------- */
 nav.tabs{
@@ -271,7 +295,10 @@ select.inp:focus,input.inp:focus,textarea.inp:focus{border-color:var(--gold);box
       <div class="hd-names">吳宇童 <span class="hd-heart">❤</span> 劉懷筑</div>
       <div class="hd-sub" id="hdVenue">WEDDING CHECK-IN · 高雄</div>
     </div>
-    <div class="mode-chip" id="modeChip"><span class="mode-dot"></span><span id="modeTxt">本機模式</span></div>
+    <div class="hd-right">
+      <button class="op-chip" id="opChip" onclick="showIdentify()"><span>👤</span><span id="opTxt">選擇身分</span></button>
+      <div class="mode-chip" id="modeChip"><span class="mode-dot"></span><span id="modeTxt">本機模式</span></div>
+    </div>
   </div>
 </header>
 
@@ -285,6 +312,7 @@ select.inp:focus,input.inp:focus,textarea.inp:focus{border-color:var(--gold);box
   <button data-v="seating"><span class="ic">🪑</span>桌次</button>
   <button data-v="guests"><span class="ic">👥</span>賓客</button>
   <button data-v="lottery"><span class="ic">🎁</span>抽獎</button>
+  <button data-v="audit"><span class="ic">📋</span>紀錄</button>
   <button data-v="settings"><span class="ic">⚙️</span>設定</button>
 </nav>
 
@@ -311,7 +339,8 @@ const DB_ROOT = "weddingCheckin"; // Firebase 資料根節點
    ============================================================ */
 const App = {
   mode: "local",
-  state: { guests:{}, tables:{}, lottery:{winners:[]}, meta:{} },
+  state: { guests:{}, tables:{}, lottery:{winners:[]}, meta:{}, logs:[] },
+  operator: "",
   fb: null,
   bc: null,
   LS_KEY: "wedding_checkin_v1",
@@ -338,6 +367,7 @@ const App = {
     if(!this.state.tables) this.state.tables={};
     if(!this.state.lottery) this.state.lottery={winners:[]};
     if(!this.state.meta) this.state.meta={};
+    if(!this.state.logs) this.state.logs=[];
     try{
       this.bc=new BroadcastChannel("wedding_checkin");
       this.bc.onmessage=(ev)=>{ this.state=ev.data; this.emit(); };
@@ -370,7 +400,7 @@ const App = {
     // 訂閱資料;讀取若被規則擋下會進 error callback
     this.fb.ref(DB_ROOT).on("value",(snap)=>{
       const v=snap.val()||{};
-      this.state={ guests:v.guests||{}, tables:v.tables||{}, lottery:v.lottery||{winners:[]}, meta:v.meta||{} };
+      this.state={ guests:v.guests||{}, tables:v.tables||{}, lottery:v.lottery||{winners:[]}, meta:v.meta||{}, logs:v.logs||[] };
       this.emit();
     },(err)=>{
       this.cloudError="資料庫拒絕讀取(請把規則設為測試模式)";
@@ -393,8 +423,16 @@ const App = {
     const txt=document.getElementById("modeTxt");
     if(this.mode==="cloud"){ chip.classList.add("cloud"); txt.textContent="雲端連線"; }
     else { chip.classList.remove("cloud"); txt.textContent="本機模式"; }
+    refreshOpUI();
   }
 };
+
+function refreshOpUI(){
+  const chip=document.getElementById("opChip"), txt=document.getElementById("opTxt");
+  if(!chip) return;
+  if(App.operator){ chip.classList.remove("unset"); txt.textContent=App.operator; }
+  else { chip.classList.add("unset"); txt.textContent="選擇身分"; }
+}
 
 function loadScript(src){
   return new Promise((res,rej)=>{
@@ -403,6 +441,41 @@ function loadScript(src){
   });
 }
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+
+/* ---- 操作紀錄 ---- */
+function pushLog(s, action, type, target, detail){
+  if(!s.logs) s.logs=[];
+  s.logs.push({ ts:Date.now(), op:App.operator||"未具名", action, type, target:target||"", detail:detail||"" });
+  if(s.logs.length>500) s.logs=s.logs.slice(-500);
+}
+
+/* ---- 操作人員識別 ---- */
+const OP_KEY="wedding_operator";
+function knownOperators(){
+  const set=new Set();
+  (App.state.meta.staffList||[]).forEach(n=>n&&set.add(n));
+  (App.state.logs||[]).forEach(l=>l.op&&l.op!=="未具名"&&set.add(l.op));
+  return [...set];
+}
+function showIdentify(){
+  const ops=knownOperators();
+  openSheet(`<div class="sheet-head"><div class="nm">請選擇操作人員</div>
+    <div class="meta"><span>每筆操作會記下是誰執行,方便事後查核</span></div></div>
+    ${ops.length?`<div class="field-lbl" style="margin-top:0">點選你的名字</div>
+      <div class="id-quick">${ops.map(n=>`<button onclick="setOperator('${esc(n).replace(/'/g,"\\'")}')">${esc(n)}</button>`).join("")}</div>`:""}
+    <div class="field-lbl">${ops.length?"或輸入新名字":"輸入你的名字"}</div>
+    <input class="inp" id="opInput" placeholder="例如 宇童 / 報到組-小美" value="${esc(App.operator||"")}">
+    <div class="btn-row"><button class="btn btn-ghost" onclick="closeSheet()">取消</button>
+      <button class="btn btn-primary" onclick="setOperator(($('#opInput').value||'').trim())">確定</button></div>
+    ${App.operator?`<button class="btn btn-ghost btn-sm" style="width:100%;margin-top:10px" onclick="setOperator('')">登出(清除身分)</button>`:""}`);
+  setTimeout(()=>{ const i=$("#opInput"); if(i&&!ops.length) i.focus(); },100);
+}
+function setOperator(name){
+  App.operator=name||"";
+  try{ name?localStorage.setItem(OP_KEY,name):localStorage.removeItem(OP_KEY); }catch(e){}
+  refreshOpUI(); closeSheet();
+  if(name) toast(`目前操作人員:${name}`);
+}
 
 /* ============================================================
    工具
@@ -440,7 +513,7 @@ function switchView(v){
 function render(){
   if(modalEl) return; // 開著彈窗時不重繪底層,避免干擾輸入
   const m=document.getElementById("main");
-  const fns={dashboard:viewDashboard,checkin:viewCheckin,seating:viewSeating,guests:viewGuests,lottery:viewLottery,settings:viewSettings};
+  const fns={dashboard:viewDashboard,checkin:viewCheckin,seating:viewSeating,guests:viewGuests,lottery:viewLottery,audit:viewAudit,settings:viewSettings};
   m.innerHTML=`<div class="view">${fns[currentView]()}</div>`;
   if(currentView==="checkin") bindCheckin();
   if(currentView==="seating") bindSeating();
@@ -601,6 +674,8 @@ function openCheckin(id){
       </div>
     </div>
 
+    ${g.checkinBy?`<div class="who-stamp">本筆由 <b>${esc(g.checkinBy)}</b> 於 ${timeStr(g.arrivedTime)} 報到${g.lastEditBy&&g.lastEditBy!==g.checkinBy?` · 最後修改 ${esc(g.lastEditBy)}`:""}</div>`:""}
+
     <div class="cookie-banner ${g.needsCookie?'need':'no'}">
       <span class="cb-ic">${g.needsCookie?"🍪":"🚫"}</span>
       <div class="cb-t">
@@ -635,18 +710,25 @@ function openCheckin(id){
     const l=$("#ckLbl"); if(l) l.textContent=cookieGiven?"✓ 喜餅已交付":"切換上方開關標記已交付"; }; }
   window.setGift=(a)=>{ $("#giftIn").value=a||""; };
   window.confirmCheckin=(gid)=>{
+    if(!App.operator){ toast("請先在右上角選擇操作人員"); showIdentify(); return; }
     const amt=Number($("#giftIn").value)||0;
     const cg=$("#ckTog")?$("#ckTog").classList.contains("on"):!!App.state.guests[gid].cookieGiven;
     App.commit(s=>{
       const gg=s.guests[gid];
       const first=!gg.arrived;
       gg.arrived=true; gg.giftAmount=amt; gg.cookieGiven=cg;
-      if(first||!gg.arrivedTime) gg.arrivedTime=Date.now();
+      if(first||!gg.arrivedTime){ gg.arrivedTime=Date.now(); gg.checkinBy=App.operator; }
+      gg.lastEditBy=App.operator; gg.lastEditTime=Date.now();
+      const detail=`禮金 ${fmtMoney(amt)}${gg.needsCookie?(cg?" · 喜餅已交付":" · 喜餅未交付"):""}`;
+      pushLog(s, first?"報到":"修改報到", first?"in":"ed", gg.name, detail);
     });
     closeSheet(); toast(`✓ ${App.state.guests[gid].name} 報到完成`);
   };
   window.undoCheckin=(gid)=>{
-    App.commit(s=>{ const gg=s.guests[gid]; gg.arrived=false; gg.arrivedTime=null; });
+    if(!App.operator){ toast("請先在右上角選擇操作人員"); showIdentify(); return; }
+    App.commit(s=>{ const gg=s.guests[gid]; gg.arrived=false; gg.arrivedTime=null; gg.checkinBy=null;
+      gg.lastEditBy=App.operator; gg.lastEditTime=Date.now();
+      pushLog(s,"取消報到","un",gg.name,""); });
     closeSheet(); toast("已取消報到");
   };
 }
@@ -839,12 +921,12 @@ function saveGuest(id){
   const table=$("#gTable").value||null;
   const needsCookie=$("#gCookie")._v;
   App.commit(s=>{
-    if(id){ Object.assign(s.guests[id],{name,side,partySize,relation,table,needsCookie}); }
-    else { s.guests[uid()]={name,side,partySize,relation,table,needsCookie,arrived:false,giftAmount:0,cookieGiven:false}; }
+    if(id){ Object.assign(s.guests[id],{name,side,partySize,relation,table,needsCookie}); pushLog(s,"編輯賓客","ed",name,""); }
+    else { s.guests[uid()]={name,side,partySize,relation,table,needsCookie,arrived:false,giftAmount:0,cookieGiven:false}; pushLog(s,"新增賓客","ed",name,""); }
   });
   closeSheet(); toast("已儲存");
 }
-function delGuest(id){ if(!confirm("確定刪除這位賓客?")) return; App.commit(s=>{ delete s.guests[id]; }); closeSheet(); toast("已刪除"); }
+function delGuest(id){ if(!confirm("確定刪除這位賓客?")) return; const nm=App.state.guests[id]?App.state.guests[id].name:""; App.commit(s=>{ delete s.guests[id]; pushLog(s,"刪除賓客","un",nm,""); }); closeSheet(); toast("已刪除"); }
 
 function openBulkImport(){
   openSheet(`<div class="sheet-head"><div class="nm">批次匯入名單</div><div class="meta"><span>每行一位賓客</span></div></div>
@@ -870,6 +952,7 @@ function doBulkImport(){
       s.guests[uid()]={name,side,partySize,relation:"",table,needsCookie,arrived:false,giftAmount:0,cookieGiven:false};
       count++;
     });
+    pushLog(s,"批次匯入","ed","",`新增 ${count} 位賓客`);
   });
   closeSheet(); toast(`已匯入 ${count} 位賓客`);
 }
@@ -950,7 +1033,7 @@ function drawWinner(){
       const winner=pool[Math.floor(Math.random()*pool.length)];
       nameEl.textContent=winner.name; nameEl.classList.remove("rolling");
       subEl.textContent="🎉 恭喜中獎!"; lastWinnerName=winner.name;
-      App.commit(s=>{ if(!s.lottery.winners)s.lottery.winners=[]; s.lottery.winners.push({guestId:winner.id,name:winner.name,prize:lotPrize,time:Date.now()}); });
+      App.commit(s=>{ if(!s.lottery.winners)s.lottery.winners=[]; s.lottery.winners.push({guestId:winner.id,name:winner.name,prize:lotPrize,time:Date.now()}); pushLog(s,"抽獎中獎","lt",winner.name,lotPrize); });
       fireConfetti($("#lotCanvas"), $("#lotStage"));
       lotRolling=false; toast(`🎉 ${winner.name} 中獎!`);
     }
@@ -993,7 +1076,7 @@ function drawProjection(){
       const winner=pool[Math.floor(Math.random()*pool.length)];
       nameEl.textContent=winner.name; nameEl.classList.remove("rolling");
       subEl.textContent="🎉 恭喜中獎!"; lastWinnerName=winner.name; btn.textContent="🎲 再抽一位";
-      App.commit(s=>{ if(!s.lottery.winners)s.lottery.winners=[]; s.lottery.winners.push({guestId:winner.id,name:winner.name,prize:lotPrize,time:Date.now()}); });
+      App.commit(s=>{ if(!s.lottery.winners)s.lottery.winners=[]; s.lottery.winners.push({guestId:winner.id,name:winner.name,prize:lotPrize,time:Date.now()}); pushLog(s,"抽獎中獎","lt",winner.name,lotPrize); });
       fireConfetti($("#pjCanvas"), $("#projEl"));
       lotRolling=false;
     }
@@ -1018,6 +1101,52 @@ function fireConfetti(canvas, parent){
 }
 
 /* ============================================================
+   操作紀錄 Audit Log
+   ============================================================ */
+let logFilter="all", logSearch="";
+const LOG_TYPES={all:"全部",in:"報到",ed:"賓客異動",un:"取消/刪除",lt:"抽獎"};
+function viewAudit(){
+  const logs=(App.state.logs||[]);
+  return `
+  <h2 class="section-title"><span class="eyebrow">Audit</span> 操作紀錄</h2>
+  <div class="note" style="margin-bottom:12px">每筆報到、禮金、喜餅與賓客異動都會記下「誰、幾點、做了什麼」。若有人登錯,可在這裡查到是哪位人員、何時操作。</div>
+  <div class="searchbar"><span class="si">🔍</span>
+    <input id="logSearch" placeholder="搜尋賓客或操作人員…" value="${esc(logSearch)}"
+      oninput="logSearch=this.value;$('#logList').innerHTML=renderLogList()"></div>
+  <div class="filter-row">
+    ${Object.entries(LOG_TYPES).map(([k,v])=>`<button class="chip ${logFilter===k?'on':''}" onclick="logFilter='${k}';render();setTimeout(()=>{const i=$('#logSearch');if(i&&logSearch)i.focus()},0)">${v}</button>`).join("")}
+  </div>
+  ${logs.length?`<div style="display:flex;justify-content:flex-end;margin-bottom:8px">
+    <button class="btn-sm btn-ghost" style="border:1px solid var(--line);border-radius:8px;padding:6px 12px" onclick="exportLogCSV()">⬇ 匯出紀錄</button></div>`:""}
+  <div class="card pad" id="logList">${renderLogList()}</div>`;
+}
+function renderLogList(){
+  let logs=[...(App.state.logs||[])].reverse();
+  const q=logSearch.trim().toLowerCase();
+  if(logFilter!=="all") logs=logs.filter(l=>l.type===logFilter);
+  if(q) logs=logs.filter(l=>(l.target||"").toLowerCase().includes(q)||(l.op||"").toLowerCase().includes(q));
+  if(!logs.length) return emptyBox("📋","還沒有符合的紀錄","操作報到或修改資料後,就會出現在這裡");
+  const badge={in:"in",ed:"ed",un:"un",lt:"lt"};
+  return logs.slice(0,300).map(l=>`<div class="log-item">
+    <div class="log-op">${esc(l.op||"未具名")}</div>
+    <div class="log-body">
+      <div class="log-act"><span class="badge ${badge[l.type]||'sy'}">${esc(l.action)}</span>${l.target?`<b>${esc(l.target)}</b>`:""}</div>
+      ${l.detail?`<div class="log-detail">${esc(l.detail)}</div>`:""}
+    </div>
+    <div class="log-time">${logTimeStr(l.ts)}</div>
+  </div>`).join("");
+}
+function logTimeStr(ts){ if(!ts)return""; const d=new Date(ts); const p=n=>n.toString().padStart(2,"0");
+  return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`; }
+function exportLogCSV(){
+  const logs=(App.state.logs||[]); if(!logs.length){ toast("沒有紀錄"); return; }
+  let csv="時間,操作人員,動作,對象,明細\n";
+  logs.forEach(l=>{ const d=new Date(l.ts);
+    csv+=[d.toLocaleString("zh-TW"),l.op||"",l.action||"",l.target||"",l.detail||""].map(x=>`"${String(x).replace(/"/g,'""')}"`).join(",")+"\n"; });
+  downloadFile("操作紀錄.csv","\uFEFF"+csv,"text/csv"); toast("已匯出紀錄");
+}
+
+/* ============================================================
    設定 Settings
    ============================================================ */
 function viewSettings(){
@@ -1038,6 +1167,18 @@ function viewSettings(){
     <div class="field-lbl" style="margin-top:0">婚宴資訊(顯示於頂端)</div>
     <input class="inp" id="setVenue" value="${esc(App.state.meta.venue||'WEDDING CHECK-IN · 高雄')}" placeholder="例如 高雄晶綺盛宴 台鋁館">
     <button class="btn btn-ghost btn-sm" style="margin-top:10px" onclick="saveMeta()">更新</button>
+  </div>
+
+  <div class="card pad set-block">
+    <h3 style="font-size:15px;margin-bottom:4px">工作人員名單</h3>
+    <div style="font-size:12.5px;color:var(--muted);margin-bottom:10px">先建好名單,當天每支手機開啟時可直接點選身分。目前操作人員:<b style="color:var(--wine)">${esc(App.operator||"未設定")}</b></div>
+    ${(App.state.meta.staffList||[]).length?`<div class="id-quick" style="margin-bottom:10px">
+      ${(App.state.meta.staffList||[]).map(n=>`<button onclick="removeStaff('${esc(n).replace(/'/g,"\\'")}')" style="position:relative">${esc(n)} <span style="color:var(--red);margin-left:4px">×</span></button>`).join("")}</div>`:`<div style="font-size:13px;color:var(--muted);margin-bottom:10px">尚未建立名單</div>`}
+    <div style="display:flex;gap:8px">
+      <input class="inp" id="staffIn" placeholder="輸入人員名字" style="flex:1">
+      <button class="btn btn-primary btn-sm" style="padding:12px 18px" onclick="addStaff()">＋</button>
+    </div>
+    <button class="btn btn-ghost btn-sm" style="width:100%;margin-top:10px" onclick="showIdentify()">🔄 切換我的操作身分</button>
   </div>
 
   <div class="card pad set-block">
@@ -1069,6 +1210,9 @@ function viewSettings(){
   `;
 }
 function saveMeta(){ const v=$("#setVenue").value.trim(); App.commit(s=>{ s.meta.venue=v; }); document.getElementById("hdVenue").textContent=v||"WEDDING CHECK-IN"; toast("已更新"); }
+function addStaff(){ const n=$("#staffIn").value.trim(); if(!n)return;
+  App.commit(s=>{ if(!s.meta.staffList)s.meta.staffList=[]; if(!s.meta.staffList.includes(n)) s.meta.staffList.push(n); }); toast("已加入名單"); }
+function removeStaff(n){ App.commit(s=>{ s.meta.staffList=(s.meta.staffList||[]).filter(x=>x!==n); }); toast("已移除"); }
 function exportJSON(){ downloadFile(`婚禮報到備份_${new Date().toISOString().slice(0,10)}.json`, JSON.stringify(App.state,null,2),"application/json"); toast("已匯出備份"); }
 function importJSON(e){
   const file=e.target.files[0]; if(!file)return;
@@ -1083,7 +1227,7 @@ function importJSON(e){
 }
 function clearAll(){ if(!confirm("確定清除所有賓客、桌次與抽獎資料?此動作無法復原。")) return;
   if(!confirm("再次確認:真的要全部清除嗎?")) return;
-  App.commit(s=>{ s.guests={}; s.tables={}; s.lottery={winners:[]}; }); toast("已清除"); }
+  App.commit(s=>{ s.guests={}; s.tables={}; s.lottery={winners:[]}; pushLog(s,"清除所有資料","un","",""); }); toast("已清除"); }
 
 /* ============================================================
    共用:彈窗 / segmented / 下載 / 空狀態
@@ -1114,8 +1258,10 @@ function emptyBox(ic,title,sub){ return `<div class="empty"><div class="e-ic">${
    啟動
    ============================================================ */
 (async function(){
+  try{ App.operator=localStorage.getItem(OP_KEY)||""; }catch(e){}
   await App.init();
   if(App.state.meta && App.state.meta.venue) document.getElementById("hdVenue").textContent=App.state.meta.venue;
+  refreshOpUI();
   // 首次使用塞入示範資料,方便立即試玩(僅本機模式且完全空白時)
   if(App.mode==="local" && guestList().length===0 && tableList().length===0){
     App.commit(s=>{
@@ -1135,6 +1281,7 @@ function emptyBox(ic,title,sub){ return `<div class="empty"><div class="e-ic">${
     toast("已載入示範名單,可自由修改 ✨");
   }
   render();
+  if(!App.operator){ setTimeout(showIdentify, 500); }
 })();
 </script>
 </body>
