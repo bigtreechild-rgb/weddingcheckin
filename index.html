@@ -296,10 +296,13 @@ select.inp:focus,input.inp:focus,textarea.inp:focus{border-color:var(--gold);box
    留空則自動使用本機模式(同一台裝置、跨分頁可同步、可立即試用)
    ============================================================ */
 const FIREBASE_CONFIG = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT.firebaseapp.com",
-  databaseURL: "https://YOUR_PROJECT-default-rtdb.firebaseio.com",
-  projectId: "YOUR_PROJECT"
+  apiKey: "AIzaSyDwayqeK4tZjNeeGyvddJ3XIsqFx9WjpNM",
+  authDomain: "weddingcome.firebaseapp.com",
+  databaseURL: "https://weddingcome-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "weddingcome",
+  storageBucket: "weddingcome.firebasestorage.app",
+  messagingSenderId: "828958406456",
+  appId: "1:828958406456:web:4f6571a26baa3506dc73cd"
 };
 const DB_ROOT = "weddingCheckin"; // Firebase 資料根節點
 
@@ -314,12 +317,17 @@ const App = {
   LS_KEY: "wedding_checkin_v1",
   listeners: [],
 
+  cloudError: null,
   async init(){
     const valid = FIREBASE_CONFIG.databaseURL && !FIREBASE_CONFIG.databaseURL.includes("YOUR_");
     if(valid){
       try{ await this.initCloud(); this.mode="cloud"; }
-      catch(e){ console.warn("Firebase 連線失敗,改用本機模式",e); this.mode="local"; this.initLocal(); }
-    } else { this.mode="local"; this.initLocal(); }
+      catch(e){
+        this.cloudError = e && e.message ? e.message : String(e);
+        console.warn("Firebase 連線失敗,改用本機模式:", this.cloudError);
+        this.mode="local"; this.initLocal();
+      }
+    } else { this.cloudError="尚未填入 Firebase 設定"; this.mode="local"; this.initLocal(); }
     this.refreshModeUI();
   },
 
@@ -343,17 +351,30 @@ const App = {
 
   /* ---- 雲端模式 ---- */
   async initCloud(){
-    await loadScript("https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js");
-    await loadScript("https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js");
+    try{
+      await loadScript("https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js");
+      await loadScript("https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js");
+    }catch(e){ throw new Error("無法載入 Firebase 程式庫(請檢查網路連線)"); }
+    if(typeof firebase==="undefined") throw new Error("Firebase 程式庫載入失敗");
     firebase.initializeApp(FIREBASE_CONFIG);
     this.fb=firebase.database();
-    return new Promise((resolve)=>{
-      this.fb.ref(DB_ROOT).on("value",(snap)=>{
-        const v=snap.val()||{};
-        this.state={ guests:v.guests||{}, tables:v.tables||{}, lottery:v.lottery||{winners:[]}, meta:v.meta||{} };
-        this.emit();
+    // 等待真正連上資料庫(.info/connected 不受規則限制)
+    await new Promise((resolve,reject)=>{
+      let settled=false;
+      const to=setTimeout(()=>{ if(!settled){ settled=true;
+        reject(new Error("連線逾時 — 多半是還沒在 Firebase 建立 Realtime Database")); } }, 7000);
+      this.fb.ref(".info/connected").on("value",(snap)=>{
+        if(snap.val()===true && !settled){ settled=true; clearTimeout(to); resolve(); }
       });
-      setTimeout(resolve,400);
+    });
+    // 訂閱資料;讀取若被規則擋下會進 error callback
+    this.fb.ref(DB_ROOT).on("value",(snap)=>{
+      const v=snap.val()||{};
+      this.state={ guests:v.guests||{}, tables:v.tables||{}, lottery:v.lottery||{winners:[]}, meta:v.meta||{} };
+      this.emit();
+    },(err)=>{
+      this.cloudError="資料庫拒絕讀取(請把規則設為測試模式)";
+      this.refreshModeUI(); this.emit();
     });
   },
 
@@ -1006,9 +1027,11 @@ function viewSettings(){
 
   <div class="card pad set-block">
     <div class="kv"><span class="k">連線模式</span><span style="font-weight:500;color:${App.mode==='cloud'?'var(--green)':'var(--gold)'}">${App.mode==='cloud'?'☁️ 雲端即時同步':'💾 本機模式'}</span></div>
+    ${App.mode!=='cloud'&&App.cloudError?`<div class="kv"><span class="k">未連線原因</span><span style="color:var(--red);font-size:13px;text-align:right;max-width:60%">${esc(App.cloudError)}</span></div>`:""}
     <div class="kv"><span class="k">賓客總數</span><span>${gs.length} 位 / ${gs.reduce((s,g)=>s+(g.partySize||1),0)} 人</span></div>
     <div class="kv"><span class="k">桌次數</span><span>${tableList().length} 桌</span></div>
     <div class="kv"><span class="k">已報到</span><span>${gs.filter(g=>g.arrived).length} 位</span></div>
+    ${App.mode!=='cloud'?`<button class="btn btn-ghost btn-sm" style="width:100%;margin-top:12px" onclick="location.reload()">🔄 重新嘗試雲端連線</button>`:""}
   </div>
 
   <div class="card pad set-block">
