@@ -74,6 +74,19 @@ header.app::after{
 .log-detail{font-size:12px;color:var(--muted);margin-top:2px}
 .log-time{flex-shrink:0;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;padding-top:2px}
 .who-stamp{font-size:12px;color:var(--muted);text-align:center;margin:-6px 0 12px}
+/* 同行人 */
+.comp-row{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.comp-idx{width:24px;height:24px;border-radius:50%;background:var(--ivory);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--muted);flex-shrink:0;font-family:"Cormorant Garamond",serif;font-weight:600}
+.comp-row input{flex:1}
+.comp-del{width:32px;height:32px;border-radius:9px;background:var(--red-soft);color:var(--red);font-size:17px;flex-shrink:0;display:flex;align-items:center;justify-content:center}
+.comp-add{width:100%;padding:11px;border-radius:11px;border:1px dashed var(--gold);background:#FCF6EC;color:var(--gold);font-weight:500;font-size:14px;margin-top:2px}
+.comp-hint{font-size:13px;color:var(--muted);text-align:center;margin-top:10px}
+.comp-hint b{color:var(--wine);font-family:"Cormorant Garamond",serif;font-size:17px}
+.party-box{background:var(--ivory);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:14px}
+.party-box .pb-title{font-size:12px;color:var(--muted);margin-bottom:8px;letter-spacing:.5px}
+.party-box .pb-list{display:flex;flex-wrap:wrap;gap:7px}
+.party-box .pb-name{font-size:14px;padding:5px 11px;border-radius:20px;background:#fff;border:1px solid var(--line)}
+.party-box .pb-name.lead{background:var(--wine);color:#fff;border-color:var(--wine);font-weight:500}
 
 /* ---------- bottom nav ---------- */
 nav.tabs{
@@ -495,6 +508,8 @@ const guestList=()=>Object.entries(App.state.guests).map(([id,g])=>({id,...g}));
 const tableList=()=>Object.entries(App.state.tables).map(([id,t])=>({id,...t})).sort((a,b)=>(a.order||0)-(b.order||0));
 function tableName(id){ const t=App.state.tables[id]; return t?t.name:null; }
 function guestsAtTable(id){ return guestList().filter(g=>g.table===id); }
+function compNames(g){ return (Array.isArray(g.companions)?g.companions:[]).filter(n=>n&&n.trim()); }
+function headCount(g){ return g.partySize||1; }
 
 /* ============================================================
    視圖切換
@@ -616,7 +631,7 @@ function viewCheckin(){
 function renderCiList(){
   let gs=guestList();
   const q=ciSearch.trim().toLowerCase();
-  if(q) gs=gs.filter(g=>(g.name||"").toLowerCase().includes(q));
+  if(q) gs=gs.filter(g=>(g.name||"").toLowerCase().includes(q)||compNames(g).some(n=>n.toLowerCase().includes(q)));
   if(ciFilter==="pending") gs=gs.filter(g=>!g.arrived);
   if(ciFilter==="done") gs=gs.filter(g=>g.arrived);
   if(ciFilter==="cookie") gs=gs.filter(g=>g.needsCookie&&g.arrived&&!g.cookieGiven);
@@ -627,13 +642,15 @@ function renderCiList(){
   if(gs.length===0) return emptyBox("🔍","找不到賓客",q?`沒有符合「${esc(ciSearch)}」的賓客`:"換個篩選條件看看");
   return gs.map(g=>{
     const tn=g.table?tableName(g.table):null;
+    const cn=compNames(g);
     return `<div class="g-card ${g.arrived?'done':''}" onclick="openCheckin('${g.id}')">
       <div class="g-tbl"><div class="t-num">${tn?esc(tn.replace(/[^0-9]/g,'')||tn.slice(0,2)):"—"}</div><div class="t-lbl">${tn?"桌":"未排桌"}</div></div>
       <div class="g-info">
-        <div class="g-name">${esc(g.name)}${g.partySize>1?`<span class="tag">${g.partySize}位</span>`:""}</div>
+        <div class="g-name">${esc(g.name)}${g.partySize>1?`<span class="tag" style="background:#F0E9F2;color:#7A5A82">👪 ${g.partySize}位</span>`:""}</div>
         <div class="g-tags">
           ${g.side?`<span class="tag side">${esc(g.side)}</span>`:""}
           ${g.relation?`<span class="tag">${esc(g.relation)}</span>`:""}
+          ${cn.length?`<span class="tag">含 ${esc(cn.slice(0,3).join("、"))}${cn.length>3?"…":""}</span>`:""}
           ${g.needsCookie?`<span class="tag cookie">🍪 ${g.cookieGiven?"已領":"需喜餅"}</span>`:""}
         </div>
       </div>
@@ -676,6 +693,14 @@ function openCheckin(id){
 
     ${g.checkinBy?`<div class="who-stamp">本筆由 <b>${esc(g.checkinBy)}</b> 於 ${timeStr(g.arrivedTime)} 報到${g.lastEditBy&&g.lastEditBy!==g.checkinBy?` · 最後修改 ${esc(g.lastEditBy)}`:""}</div>`:""}
 
+    ${g.partySize>1?`<div class="party-box">
+      <div class="pb-title">👪 本帖共 ${g.partySize} 位 · 一起報到</div>
+      <div class="pb-list">
+        <span class="pb-name lead">${esc(g.name)}</span>
+        ${(Array.isArray(g.companions)?g.companions:[]).map(c=>`<span class="pb-name">${c&&c.trim()?esc(c):"同行"}</span>`).join("")}
+      </div>
+    </div>`:""}
+
     <div class="cookie-banner ${g.needsCookie?'need':'no'}">
       <span class="cb-ic">${g.needsCookie?"🍪":"🚫"}</span>
       <div class="cb-t">
@@ -686,7 +711,7 @@ function openCheckin(id){
     </div>
     ${g.needsCookie?`<div style="text-align:center;font-size:13px;color:var(--muted);margin:-8px 0 4px" id="ckLbl">${cookieGiven?"✓ 喜餅已交付":"切換上方開關標記已交付"}</div>`:""}
 
-    <div class="field-lbl">禮金金額</div>
+    <div class="field-lbl">禮金金額${g.partySize>1?' (整帖一份)':''}</div>
     <div class="gift-input"><span class="ntd">NT$</span>
       <input id="giftIn" type="number" inputmode="numeric" placeholder="0" value="${gift}">
     </div>
@@ -767,9 +792,9 @@ function viewSeating(){
         <button class="icon-btn" style="width:28px;height:28px;background:rgba(255,255,255,.15);border:none;color:#fff" onclick="openTableEdit('${t.id}')">✎</button>
       </div>
       <div class="st-body">
-        ${at.length?at.map(g=>`<div class="seat-pill ${g.arrived?'arr':''}">
-          ${g.arrived?"✓ ":""}${esc(g.name)}${g.partySize>1?` ·${g.partySize}`:""}
-          <span class="x" onclick="unassign('${g.id}')">×</span></div>`).join("")
+        ${at.length?at.map(g=>{ const cn=compNames(g); return `<div class="seat-pill ${g.arrived?'arr':''}"${cn.length?` title="同行:${esc(cn.join('、'))}"`:""}>
+          ${g.arrived?"✓ ":""}${esc(g.name)}${g.partySize>1?` <b style="color:#7A5A82">+${g.partySize-1}</b>`:""}
+          <span class="x" onclick="unassign('${g.id}')">×</span></div>`;}).join("")
           :`<span class="st-empty">拖曳賓客到這桌,或點上方賓客選擇桌次</span>`}
       </div>
     </div>`;
@@ -856,6 +881,7 @@ function viewGuests(){
   return `
   <h2 class="section-title"><span class="eyebrow">Guests</span> 賓客名單 <span style="font-family:'Cormorant Garamond';color:var(--muted);font-size:18px">${guestList().length}</span></h2>
   <div class="seat-head" style="margin-bottom:10px">
+    <button class="btn btn-ghost btn-sm" onclick="openMerge()">🔗 合併家人</button>
     <button class="btn btn-ghost btn-sm" onclick="openBulkImport()">📋 批次匯入</button>
     <button class="btn btn-ghost btn-sm" onclick="exportCSV()">⬇ 匯出名單</button>
   </div>
@@ -865,11 +891,11 @@ function viewGuests(){
     return `<div class="adm-row">
       <div class="adm-tnum">${g.table?esc((tn.match(/\d+/)||[tn.slice(0,1)])[0]):"—"}</div>
       <div class="adm-info" onclick="openGuestEdit('${g.id}')">
-        <div class="adm-name">${esc(g.name)} ${g.arrived?'<span style="color:var(--green);font-size:12px">✓已到</span>':""}</div>
+        <div class="adm-name">${esc(g.name)}${g.partySize>1?`<span style="color:#7A5A82;font-size:12px"> +${g.partySize-1}</span>`:""} ${g.arrived?'<span style="color:var(--green);font-size:12px">✓已到</span>':""}</div>
         <div class="adm-sub">
           <span>${esc(tn)}</span>
           ${g.side?`<span>· ${esc(g.side)}</span>`:""}
-          ${g.partySize>1?`<span>· ${g.partySize}位</span>`:""}
+          ${compNames(g).length?`<span>· 👪 ${esc(compNames(g).slice(0,4).join("、"))}${compNames(g).length>4?"…":""}</span>`:(g.partySize>1?`<span>· ${g.partySize}位</span>`:"")}
           ${g.needsCookie?`<span style="color:#B07A2E">· 🍪喜餅</span>`:""}
         </div>
       </div>
@@ -879,10 +905,13 @@ function viewGuests(){
   `;
 }
 function openGuestEdit(id){
-  const g=id?App.state.guests[id]:{name:"",side:"",relation:"",table:null,needsCookie:false,partySize:1,note:""};
+  const g=id?App.state.guests[id]:{name:"",side:"",relation:"",table:null,needsCookie:false,partySize:1,companions:[],note:""};
   const tbls=tableList();
+  // 初始同行人:有 companions 用之;舊資料只有 partySize 則補出空白列
+  let initComps = Array.isArray(g.companions) ? g.companions.slice() : [];
+  if(!Array.isArray(g.companions) && (g.partySize||1)>1){ initComps = Array.from({length:(g.partySize-1)},()=>""); }
   openSheet(`<div class="sheet-head"><div class="nm">${id?"編輯賓客":"新增賓客"}</div></div>
-    <div class="field-lbl">姓名 / 稱謂</div><input class="inp" id="gName" value="${esc(g.name)}" placeholder="例如 王大明 / 陳阿姨一家">
+    <div class="field-lbl">主賓客姓名 / 稱謂</div><input class="inp" id="gName" value="${esc(g.name)}" placeholder="例如 王大明 / 陳阿姨">
     <div class="two">
       <div><div class="field-lbl">男方 / 女方</div>
         <div class="seg" id="gSide">
@@ -890,16 +919,21 @@ function openGuestEdit(id){
           <button class="${g.side==='女方'?'on':''}" data-f="女方">女方</button>
           <button class="${(!g.side||g.side==='共同')?'on':''}" data-f="共同">共同</button>
         </div></div>
-      <div><div class="field-lbl">人數</div><input class="inp" id="gParty" type="number" inputmode="numeric" value="${g.partySize||1}" min="1"></div>
+      <div><div class="field-lbl">關係標籤</div><input class="inp" id="gRel" value="${esc(g.relation||"")}" placeholder="如 大學同學"></div>
     </div>
-    <div class="field-lbl">關係 / 備註標籤(可留空)</div><input class="inp" id="gRel" value="${esc(g.relation||"")}" placeholder="例如 大學同學 / 公司同事 / 親戚">
+
+    <div class="field-lbl">同行人 <span style="color:var(--muted);font-weight:400">(一起報到、合包一份禮金)</span></div>
+    <div id="compList">${initComps.map((c,i)=>compRowHTML(c,i)).join("")}</div>
+    <button class="comp-add" onclick="addCompanionRow()">＋ 新增同行人</button>
+    <div class="comp-hint">本帖共 <b id="compTotal">${1+initComps.length}</b> 位(含主賓客)</div>
+
     <div class="field-lbl">安排桌次</div>
     <select class="inp" id="gTable"><option value="">未排桌</option>
       ${tbls.map(t=>`<option value="${t.id}" ${g.table===t.id?"selected":""}>${esc(t.name)}</option>`).join("")}</select>
 
     <div class="cookie-banner ${g.needsCookie?'need':'no'}" style="margin-top:16px" id="ckBanner">
       <span class="cb-ic">🍪</span>
-      <div class="cb-t"><b>這位賓客要給喜餅嗎?</b><span>報到時工作人員會看到提醒</span></div>
+      <div class="cb-t"><b>這帖要給喜餅嗎?</b><span>報到時工作人員會看到提醒</span></div>
       <div class="toggle ${g.needsCookie?'on':''}" id="gCookie"></div>
     </div>
 
@@ -913,20 +947,110 @@ function openGuestEdit(id){
   ck.onclick=()=>{ needCookie=!needCookie; ck.classList.toggle("on",needCookie); banner.classList.toggle("need",needCookie); banner.classList.toggle("no",!needCookie); ck._v=needCookie; };
   ck._v=needCookie;
 }
+function compRowHTML(name,i){
+  return `<div class="comp-row">
+    <span class="comp-idx">${i+2}</span>
+    <input class="inp comp-name" placeholder="同行人姓名(可留空)" value="${esc(name||"")}">
+    <button class="comp-del" onclick="this.closest('.comp-row').remove();updateCompTotal()">×</button>
+  </div>`;
+}
+function addCompanionRow(){
+  const list=$("#compList"); if(!list)return;
+  const n=list.querySelectorAll(".comp-row").length;
+  list.insertAdjacentHTML("beforeend", compRowHTML("",n));
+  updateCompTotal();
+  const inputs=list.querySelectorAll(".comp-name");
+  if(inputs.length) inputs[inputs.length-1].focus();
+}
+function updateCompTotal(){
+  const list=$("#compList"); if(!list)return;
+  const rows=list.querySelectorAll(".comp-row");
+  rows.forEach((r,i)=>{ const idx=r.querySelector(".comp-idx"); if(idx) idx.textContent=i+2; });
+  const t=$("#compTotal"); if(t) t.textContent=1+rows.length;
+}
+function collectCompanions(){
+  const list=$("#compList"); if(!list)return [];
+  return [...list.querySelectorAll(".comp-name")].map(i=>i.value.trim());
+}
 function saveGuest(id){
-  const name=$("#gName").value.trim(); if(!name){ toast("請輸入姓名"); return; }
+  const name=$("#gName").value.trim(); if(!name){ toast("請輸入主賓客姓名"); return; }
   const side=$("#gSide").dataset.sel||"共同";
-  const partySize=Math.max(1,parseInt($("#gParty").value)||1);
+  const companions=collectCompanions();
+  const partySize=1+companions.length;
   const relation=$("#gRel").value.trim();
   const table=$("#gTable").value||null;
   const needsCookie=$("#gCookie")._v;
   App.commit(s=>{
-    if(id){ Object.assign(s.guests[id],{name,side,partySize,relation,table,needsCookie}); pushLog(s,"編輯賓客","ed",name,""); }
-    else { s.guests[uid()]={name,side,partySize,relation,table,needsCookie,arrived:false,giftAmount:0,cookieGiven:false}; pushLog(s,"新增賓客","ed",name,""); }
+    if(id){ Object.assign(s.guests[id],{name,side,partySize,companions,relation,table,needsCookie}); pushLog(s,"編輯賓客","ed",name,partySize>1?`整帖 ${partySize} 位`:""); }
+    else { s.guests[uid()]={name,side,partySize,companions,relation,table,needsCookie,arrived:false,giftAmount:0,cookieGiven:false}; pushLog(s,"新增賓客","ed",name,partySize>1?`整帖 ${partySize} 位`:""); }
   });
   closeSheet(); toast("已儲存");
 }
 function delGuest(id){ if(!confirm("確定刪除這位賓客?")) return; const nm=App.state.guests[id]?App.state.guests[id].name:""; App.commit(s=>{ delete s.guests[id]; pushLog(s,"刪除賓客","un",nm,""); }); closeSheet(); toast("已刪除"); }
+
+/* ---- 合併家人:把分開的數筆併成一組(主賓客＋同行人) ---- */
+let mergeSel=[], mergeSearch="";
+function openMerge(){ mergeSel=[]; mergeSearch=""; openSheet(mergeSheetHTML()); }
+function mergeSheetHTML(){
+  let gs=guestList();
+  const q=mergeSearch.trim().toLowerCase();
+  if(q) gs=gs.filter(g=>(g.name||"").toLowerCase().includes(q)||compNames(g).some(c=>c.toLowerCase().includes(q)));
+  gs.sort((a,b)=>{ if(!!a.table!==!!b.table)return a.table?-1:1;
+    if(a.table&&b.table&&a.table!==b.table)return (tableName(a.table)||"").localeCompare(tableName(b.table)||"","zh-Hant");
+    return (a.name||"").localeCompare(b.name||"","zh-Hant"); });
+  const heads=mergeSel.reduce((s,id)=>s+(App.state.guests[id]?App.state.guests[id].partySize||1:0),0);
+  return `<div class="sheet-head"><div class="nm">合併家人成一組</div>
+    <div class="meta"><span>勾選同住家人,第一位為代表(主賓客),其餘變同行人</span></div></div>
+    <div class="searchbar" style="margin-bottom:10px"><span class="si">🔍</span>
+      <input id="mgSearch" placeholder="搜尋姓名…" value="${esc(mergeSearch)}"
+        oninput="mergeSearch=this.value;refreshMergeSheet(true)"></div>
+    <div style="max-height:44vh;overflow:auto;border:1px solid var(--line);border-radius:12px;margin-bottom:12px">
+      ${gs.length?gs.map(g=>{ const idx=mergeSel.indexOf(g.id);
+        return `<label style="display:flex;align-items:center;gap:11px;padding:11px 13px;border-bottom:1px solid var(--line)">
+          <input type="checkbox" ${idx>=0?"checked":""} onchange="toggleMerge('${g.id}')" style="width:21px;height:21px;accent-color:var(--wine);flex-shrink:0">
+          <span style="flex:1;min-width:0"><span style="font-weight:500">${esc(g.name)}</span>${g.partySize>1?`<span style="color:#7A5A82;font-size:12px"> +${g.partySize-1}</span>`:""}
+            <span style="color:var(--muted);font-size:12px;display:block">${g.table?esc(tableName(g.table)):"未排桌"}${g.side?" · "+esc(g.side):""}</span></span>
+          ${idx===0?'<span class="tag" style="background:var(--wine);color:#fff">代表</span>':idx>0?`<span class="tag">同行${idx}</span>`:""}
+        </label>`; }).join(""):`<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">找不到賓客</div>`}
+    </div>
+    <div style="text-align:center;font-size:13px;color:var(--muted);margin-bottom:12px">
+      ${mergeSel.length>=2?`代表:<b style="color:var(--wine)">${esc(App.state.guests[mergeSel[0]].name)}</b> · 合併後整組 <b>${heads}</b> 位`:`已勾選 ${mergeSel.length} 位(至少選 2 位)`}</div>
+    <div class="btn-row"><button class="btn btn-ghost" onclick="closeSheet()">取消</button>
+      <button class="btn btn-primary" onclick="doMerge()" ${mergeSel.length<2?'disabled style="opacity:.45"':""}>合併成一組</button></div>`;
+}
+function refreshMergeSheet(keepFocus){
+  if(!modalEl)return;
+  const pad=modalEl.querySelector(".sheet-pad"); if(!pad)return;
+  pad.innerHTML=mergeSheetHTML();
+  if(keepFocus){ const i=$("#mgSearch"); if(i){ i.focus(); i.setSelectionRange(i.value.length,i.value.length); } }
+}
+function toggleMerge(id){ const i=mergeSel.indexOf(id); if(i>=0)mergeSel.splice(i,1); else mergeSel.push(id); refreshMergeSheet(); }
+function doMerge(){
+  if(mergeSel.length<2)return;
+  const [mainId,...rest]=mergeSel;
+  const mainName=App.state.guests[mainId]?App.state.guests[mainId].name:"";
+  App.commit(s=>{
+    const main=s.guests[mainId]; if(!main)return;
+    if(!Array.isArray(main.companions)) main.companions=[];
+    // 主賓客原本若只有人數沒名字,補成未具名同行
+    let mainExtra=(main.partySize||1)-1-main.companions.length; if(mainExtra<0)mainExtra=0;
+    for(let k=0;k<mainExtra;k++) main.companions.push("");
+    rest.forEach(rid=>{ const o=s.guests[rid]; if(!o)return;
+      main.companions.push(o.name);
+      const oc=Array.isArray(o.companions)?o.companions:[];
+      oc.forEach(c=>main.companions.push(c));
+      let oExtra=(o.partySize||1)-1-oc.length; if(oExtra<0)oExtra=0;
+      for(let k=0;k<oExtra;k++) main.companions.push("");
+      if(o.needsCookie) main.needsCookie=true;
+      if(o.giftAmount) main.giftAmount=(main.giftAmount||0)+Number(o.giftAmount||0);
+      if(o.arrived) main.arrived=true;
+      delete s.guests[rid];
+    });
+    main.partySize=1+main.companions.length;
+    pushLog(s,"合併家人","ed",main.name,`併入 ${rest.length} 位 → 整組 ${main.partySize} 位`);
+  });
+  closeSheet(); toast(`已合併為一組:${mainName} 等 ${rest.length+1} 位`);
+}
 
 function openBulkImport(){
   openSheet(`<div class="sheet-head"><div class="nm">批次匯入名單</div><div class="meta"><span>每行一位賓客</span></div></div>
