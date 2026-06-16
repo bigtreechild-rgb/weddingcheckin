@@ -209,6 +209,7 @@ main{max-width:760px;margin:0 auto;padding:16px 14px 24px}
 .quick-amt{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}
 .quick-amt button{padding:8px 13px;border-radius:20px;border:1px solid var(--line);background:var(--paper);font-size:14px;color:var(--ink);transition:.14s}
 .quick-amt button:active{background:var(--gold-soft);border-color:var(--gold)}
+.quick-divider{height:1px;background:var(--line);margin:11px 2px 10px}
 
 .btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:15px;border-radius:14px;font-size:16px;font-weight:500;transition:.16s}
 .btn-primary{background:var(--wine);color:#fff;box-shadow:0 6px 18px rgba(126,42,61,.28)}
@@ -320,7 +321,7 @@ select.inp:focus,input.inp:focus,textarea.inp:focus{border-color:var(--gold);box
 <button class="fab hidden" id="fab" onclick="openGuestEdit()">＋</button>
 
 <nav class="tabs" id="tabs">
-  <button data-v="dashboard" class="active"><span class="ic">📊</span>戰況</button>
+  <button data-v="dashboard" class="active"><span class="ic">📊</span>現況</button>
   <button data-v="checkin"><span class="ic">✅</span>報到</button>
   <button data-v="seating"><span class="ic">🪑</span>桌次</button>
   <button data-v="guests"><span class="ic">👥</span>賓客</button>
@@ -532,6 +533,7 @@ function render(){
   m.innerHTML=`<div class="view">${fns[currentView]()}</div>`;
   if(currentView==="checkin") bindCheckin();
   if(currentView==="seating") bindSeating();
+  if(currentView==="guests") bindGuests();
 }
 App.onChange(()=>{ if(!modalEl) render(); });
 
@@ -539,6 +541,22 @@ App.onChange(()=>{ if(!modalEl) render(); });
    戰況 Dashboard
    ============================================================ */
 let giftVisible=false;
+const GIFT_PASSWORD="05231101";
+function unlockGift(){
+  openSheet(`<div class="sheet-head"><div class="nm">🔒 檢視禮金累計</div>
+    <div class="meta"><span>請輸入密碼後檢視</span></div></div>
+    <div class="field-lbl" style="margin-top:0">密碼</div>
+    <input class="inp" id="giftPw" type="password" inputmode="numeric" placeholder="請輸入密碼"
+      onkeydown="if(event.key==='Enter')checkGiftPw()" style="text-align:center;letter-spacing:4px;font-size:20px">
+    <div class="btn-row"><button class="btn btn-ghost" onclick="closeSheet()">取消</button>
+      <button class="btn btn-primary" onclick="checkGiftPw()">解鎖</button></div>`);
+  setTimeout(()=>{ const i=$("#giftPw"); if(i)i.focus(); },150);
+}
+function checkGiftPw(){
+  const v=($("#giftPw")||{}).value||"";
+  if(v===GIFT_PASSWORD){ giftVisible=true; closeSheet(); toast("已解鎖禮金累計"); }
+  else { toast("密碼錯誤"); const i=$("#giftPw"); if(i){ i.value=""; i.focus(); } }
+}
 function viewDashboard(){
   const gs=guestList();
   const totalHeads=gs.reduce((s,g)=>s+(g.partySize||1),0);
@@ -553,12 +571,12 @@ function viewDashboard(){
   const tbls=tableList();
 
   if(gs.length===0){
-    return `<h2 class="section-title"><span class="eyebrow">Live</span> 報到戰況</h2>
+    return `<h2 class="section-title"><span class="eyebrow">Live</span> 報到現況</h2>
       ${emptyBox("🕊️","還沒有賓客名單","先到「賓客」分頁建立名單,或到「桌次」設定桌位")}`;
   }
 
   return `
-  <h2 class="section-title"><span class="eyebrow">Live</span> 報到戰況</h2>
+  <h2 class="section-title"><span class="eyebrow">Live</span> 報到現況</h2>
 
   <div class="progress-card card">
     <div class="progress-head">
@@ -581,7 +599,7 @@ function viewDashboard(){
       <div style="font-size:13px;color:var(--muted);letter-spacing:1px">禮金累計</div>
       <div class="gift-amt">${giftVisible?fmtMoney(giftTotal):"$ ••••••"}</div>
     </div>
-    <button class="eye-btn" onclick="giftVisible=!giftVisible;render()">${giftVisible?"🙈 隱藏":"👁 顯示"}</button>
+    <button class="eye-btn" onclick="${giftVisible?'giftVisible=false;render()':'unlockGift()'}">${giftVisible?"🙈 隱藏":"🔒 顯示"}</button>
   </div>
 
   ${feed.length?`<div class="card pad" style="margin-bottom:14px">
@@ -673,7 +691,8 @@ function bindCheckin(){
 }
 
 /* ---- 報到彈窗 ---- */
-const QUICK_AMTS=[2600,3200,3600,5200,6000,8000,8800,10000,12000];
+const QUICK_AMTS_1=[1200,1600,1800,2000,2200,2600,2800,3200,3600];
+const QUICK_AMTS_2=[5200,6000,8000,8800,10000,12000];
 function openCheckin(id){
   const g=App.state.guests[id]; if(!g)return;
   let gift=g.giftAmount||"";
@@ -716,7 +735,11 @@ function openCheckin(id){
       <input id="giftIn" type="number" inputmode="numeric" placeholder="0" value="${gift}">
     </div>
     <div class="quick-amt">
-      ${QUICK_AMTS.map(a=>`<button onclick="setGift(${a})">${a.toLocaleString()}</button>`).join("")}
+      ${QUICK_AMTS_1.map(a=>`<button onclick="setGift(${a})">${a.toLocaleString()}</button>`).join("")}
+    </div>
+    <div class="quick-divider"></div>
+    <div class="quick-amt">
+      ${QUICK_AMTS_2.map(a=>`<button onclick="setGift(${a})">${a.toLocaleString()}</button>`).join("")}
       <button onclick="setGift(0)" style="color:var(--muted)">清除</button>
     </div>
 
@@ -873,11 +896,8 @@ function delTable(id){
    賓客管理 Guests
    ============================================================ */
 let gAdmSearch="";
+let gAdmSort="table";
 function viewGuests(){
-  let gs=guestList();
-  const q=gAdmSearch.trim().toLowerCase();
-  if(q) gs=gs.filter(g=>(g.name||"").toLowerCase().includes(q));
-  gs.sort((a,b)=>(a.name||"").localeCompare(b.name||"","zh-Hant"));
   return `
   <h2 class="section-title"><span class="eyebrow">Guests</span> 賓客名單 <span style="font-family:'Cormorant Garamond';color:var(--muted);font-size:18px">${guestList().length}</span></h2>
   <div class="seat-head" style="margin-bottom:10px">
@@ -885,8 +905,29 @@ function viewGuests(){
     <button class="btn btn-ghost btn-sm" onclick="openBulkImport()">📋 批次匯入</button>
     <button class="btn btn-ghost btn-sm" onclick="exportCSV()">⬇ 匯出名單</button>
   </div>
-  <div class="searchbar"><span class="si">🔍</span><input id="gAdmSearch" placeholder="搜尋姓名…" value="${esc(gAdmSearch)}" oninput="gAdmSearch=this.value;render();$('#gAdmSearch')&&$('#gAdmSearch').focus()"></div>
-  ${gs.length?`<div class="card">${gs.map(g=>{
+  <div class="seg" style="margin-bottom:10px">
+    <button class="${gAdmSort==='table'?'on':''}" onclick="gAdmSort='table';render()">依桌次排序</button>
+    <button class="${gAdmSort==='name'?'on':''}" onclick="gAdmSort='name';render()">依姓名排序</button>
+  </div>
+  <div class="searchbar"><span class="si">🔍</span><input id="gAdmSearch" placeholder="搜尋姓名…" value="${esc(gAdmSearch)}" autocomplete="off"></div>
+  <div id="gAdmList">${renderGuestRows()}</div>`;
+}
+function renderGuestRows(){
+  let gs=guestList();
+  const q=gAdmSearch.trim().toLowerCase();
+  if(q) gs=gs.filter(g=>(g.name||"").toLowerCase().includes(q)||compNames(g).some(c=>c.toLowerCase().includes(q)));
+  if(gAdmSort==="table"){
+    gs.sort((a,b)=>{
+      const ta=a.table?App.state.tables[a.table]:null, tb=b.table?App.state.tables[b.table]:null;
+      if(!!ta!==!!tb) return ta?-1:1;
+      if(ta&&tb&&(ta.order||0)!==(tb.order||0)) return (ta.order||0)-(tb.order||0);
+      return (a.name||"").localeCompare(b.name||"","zh-Hant");
+    });
+  } else {
+    gs.sort((a,b)=>(a.name||"").localeCompare(b.name||"","zh-Hant"));
+  }
+  if(!gs.length) return emptyBox("👥",q?"找不到賓客":"名單是空的",q?`沒有符合「${esc(gAdmSearch)}」的賓客`:"點右下 ＋ 新增賓客,或用「批次匯入」一次貼上整份名單");
+  return `<div class="card">${gs.map(g=>{
     const tn=g.table?tableName(g.table):"未排桌";
     return `<div class="adm-row">
       <div class="adm-tnum">${g.table?esc((tn.match(/\d+/)||[tn.slice(0,1)])[0]):"—"}</div>
@@ -901,8 +942,11 @@ function viewGuests(){
       </div>
       <button class="icon-btn" onclick="openGuestEdit('${g.id}')">✎</button>
     </div>`;
-  }).join("")}</div>`:emptyBox("👥","名單是空的","點右下 ＋ 新增賓客,或用「批次匯入」一次貼上整份名單")}
-  `;
+  }).join("")}</div>`;
+}
+function bindGuests(){
+  const inp=$("#gAdmSearch");
+  if(inp){ inp.oninput=()=>{ gAdmSearch=inp.value; $("#gAdmList").innerHTML=renderGuestRows(); }; }
 }
 function openGuestEdit(id){
   const g=id?App.state.guests[id]:{name:"",side:"",relation:"",table:null,needsCookie:false,partySize:1,companions:[],note:""};
