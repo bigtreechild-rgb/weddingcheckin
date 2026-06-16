@@ -121,6 +121,16 @@ main{max-width:760px;margin:0 auto;padding:16px 14px 24px}
 .stat.gold .num{color:var(--gold)}
 .stat.green .num{color:var(--green)}
 .stat .corner{position:absolute;top:11px;right:13px;font-size:18px;opacity:.5}
+.stat.tappable{cursor:pointer;transition:.14s}
+.stat.tappable:active{transform:scale(.98);box-shadow:var(--shadow)}
+.gl-row{display:flex;align-items:center;gap:11px;padding:11px 4px;border-bottom:1px solid var(--line)}
+.gl-row:last-child{border-bottom:none}
+.gl-tnum{width:38px;height:38px;border-radius:10px;background:var(--ivory);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-family:"Cormorant Garamond",serif;font-weight:600;color:var(--wine);flex-shrink:0}
+.gl-info{flex:1;min-width:0}
+.gl-name{font-weight:500}
+.gl-sub{font-size:13px;color:var(--muted)}
+.gl-right{flex-shrink:0;text-align:right;font-size:13px}
+.gl-amt{font-family:"Cormorant Garamond",serif;font-weight:600;color:var(--gold);font-size:18px}
 
 .progress-card{margin-bottom:14px;padding:18px}
 .progress-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:11px}
@@ -210,6 +220,7 @@ main{max-width:760px;margin:0 auto;padding:16px 14px 24px}
 .quick-amt button{padding:8px 13px;border-radius:20px;border:1px solid var(--line);background:var(--paper);font-size:14px;color:var(--ink);transition:.14s}
 .quick-amt button:active{background:var(--gold-soft);border-color:var(--gold)}
 .quick-divider{height:1px;background:var(--line);margin:11px 2px 10px}
+.quick-amt button.sel{background:var(--wine);color:#fff;border-color:var(--wine);font-weight:500;box-shadow:0 3px 10px rgba(126,42,61,.25)}
 
 .btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:15px;border-radius:14px;font-size:16px;font-weight:500;transition:.16s}
 .btn-primary{background:var(--wine);color:#fff;box-shadow:0 6px 18px rgba(126,42,61,.28)}
@@ -588,9 +599,9 @@ function viewDashboard(){
   </div>
 
   <div class="stat-grid">
-    <div class="stat green"><span class="corner">🎉</span><div class="num">${arrived.length}</div><div class="lbl">已報到桌帖</div></div>
-    <div class="stat"><span class="corner">⏳</span><div class="num">${gs.length-arrived.length}</div><div class="lbl">尚未報到</div></div>
-    <div class="stat gold"><span class="corner">🍪</span><div class="num">${cookieGiven}<span style="font-size:20px;color:var(--muted)">/${cookieNeed}</span></div><div class="lbl">喜餅已發 / 需發</div></div>
+    <div class="stat green tappable" onclick="openGuestListSheet('arrived')"><span class="corner">🎉</span><div class="num">${arrived.length}</div><div class="lbl">已報到組數 ›</div></div>
+    <div class="stat tappable" onclick="openGuestListSheet('pending')"><span class="corner">⏳</span><div class="num">${gs.length-arrived.length}</div><div class="lbl">尚未報到 ›</div></div>
+    <div class="stat gold tappable" onclick="openGuestListSheet('cookie')"><span class="corner">🍪</span><div class="num">${cookieGiven}<span style="font-size:20px;color:var(--muted)">/${cookieNeed}</span></div><div class="lbl">喜餅已發 / 需發 ›</div></div>
     <div class="stat"><span class="corner">🪑</span><div class="num">${tbls.length}</div><div class="lbl">總桌數</div></div>
   </div>
 
@@ -599,7 +610,9 @@ function viewDashboard(){
       <div style="font-size:13px;color:var(--muted);letter-spacing:1px">禮金累計</div>
       <div class="gift-amt">${giftVisible?fmtMoney(giftTotal):"$ ••••••"}</div>
     </div>
-    <button class="eye-btn" onclick="${giftVisible?'giftVisible=false;render()':'unlockGift()'}">${giftVisible?"🙈 隱藏":"🔒 顯示"}</button>
+    ${giftVisible
+      ? `<div style="display:flex;gap:8px"><button class="eye-btn" onclick="openGiftDetail()">📋 明細</button><button class="eye-btn" onclick="giftVisible=false;render()">🙈 隱藏</button></div>`
+      : `<button class="eye-btn" onclick="unlockGift()">🔒 顯示</button>`}
   </div>
 
   ${feed.length?`<div class="card pad" style="margin-bottom:14px">
@@ -624,6 +637,85 @@ function viewDashboard(){
     }).join("")}
   </div>`:""}
   `;
+}
+
+/* 依桌次再依姓名排序 */
+function byTableThenName(a,b){
+  const ta=a.table?App.state.tables[a.table]:null, tb=b.table?App.state.tables[b.table]:null;
+  if(!!ta!==!!tb) return ta?-1:1;
+  if(ta&&tb&&(ta.order||0)!==(tb.order||0)) return (ta.order||0)-(tb.order||0);
+  return (a.name||"").localeCompare(b.name||"","zh-Hant");
+}
+/* 點現況統計 → 看是哪些人 */
+function openGuestListSheet(type){
+  let gs=guestList(), title, empty;
+  if(type==="arrived"){ gs=gs.filter(g=>g.arrived); title="✅ 已報到名單"; empty="還沒有人報到"; }
+  else if(type==="pending"){ gs=gs.filter(g=>!g.arrived); title="⏳ 尚未報到名單"; empty="全部都到齊了 🎉"; }
+  else { gs=gs.filter(g=>g.needsCookie); title="🍪 需給喜餅名單"; empty="沒有需要喜餅的賓客"; }
+  gs.sort(byTableThenName);
+  const heads=gs.reduce((s,g)=>s+(g.partySize||1),0);
+  const rows=gs.length?gs.map(g=>{
+    const tn=g.table?tableName(g.table):"未排桌";
+    const num=g.table?((tn.match(/\d+/)||[tn.slice(0,1)])[0]):"—";
+    let right="";
+    if(type==="arrived") right=`<div class="gl-sub" style="color:var(--green)">✓ ${timeStr(g.arrivedTime)}</div>${g.checkinBy?`<div class="gl-sub">${esc(g.checkinBy)}</div>`:""}`;
+    else if(type==="pending") right=`<div class="gl-sub">${esc(tn)}</div>`;
+    else right=g.cookieGiven?`<span class="tag" style="background:var(--green-soft);color:var(--green)">已交付</span>`:`<span class="tag cookie">未交付</span>`;
+    return `<div class="gl-row">
+      <div class="gl-tnum">${esc(num)}</div>
+      <div class="gl-info"><div class="gl-name">${esc(g.name)}${g.partySize>1?`<span style="color:#7A5A82;font-size:13px"> +${g.partySize-1}</span>`:""}</div>
+        <div class="gl-sub">${esc(tn)}${g.relation?" · "+esc(g.relation):""}${compNames(g).length?" · 👪 "+esc(compNames(g).slice(0,3).join("、")):""}</div></div>
+      <div class="gl-right">${right}</div>
+    </div>`;
+  }).join(""):`<div class="empty"><div class="e-ic">🕊️</div><div style="font-size:15px">${empty}</div></div>`;
+  openSheet(`<div class="sheet-head"><div class="nm">${title}</div>
+    <div class="meta"><span>${gs.length} 帖 · 共 ${heads} 人</span></div></div>
+    ${rows}
+    <button class="btn btn-ghost" style="margin-top:14px" onclick="closeSheet()">關閉</button>`);
+}
+/* 禮金明細(解鎖後) */
+let giftDetailSort="amount";
+function openGiftDetail(){
+  openSheet(giftDetailHTML());
+  bindGiftDetail();
+}
+function giftDetailHTML(){
+  let gs=guestList().filter(g=>g.arrived);
+  const total=gs.reduce((s,g)=>s+(Number(g.giftAmount)||0),0);
+  const withGift=gs.filter(g=>Number(g.giftAmount)>0).length;
+  if(giftDetailSort==="amount") gs.sort((a,b)=>(Number(b.giftAmount)||0)-(Number(a.giftAmount)||0));
+  else gs.sort(byTableThenName);
+  const rows=gs.length?gs.map(g=>{
+    const tn=g.table?tableName(g.table):"未排桌";
+    return `<div class="gl-row">
+      <div class="gl-info"><div class="gl-name">${esc(g.name)}${g.partySize>1?`<span style="color:#7A5A82;font-size:13px"> +${g.partySize-1}</span>`:""}</div>
+        <div class="gl-sub">${esc(tn)}${g.checkinBy?" · "+esc(g.checkinBy):""} · ${timeStr(g.arrivedTime)}</div></div>
+      <div class="gl-amt">${Number(g.giftAmount)>0?fmtMoney(g.giftAmount):'<span style="color:var(--muted);font-size:14px">—</span>'}</div>
+    </div>`;
+  }).join(""):`<div class="empty"><div class="e-ic">💰</div><div style="font-size:15px">還沒有報到的禮金紀錄</div></div>`;
+  return `<div class="sheet-head"><div class="nm">💰 禮金明細</div>
+    <div class="meta"><span>共 ${withGift} 筆 · 累計 ${fmtMoney(total)}</span></div></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <div class="seg" id="gdSort" style="flex:1;margin-right:8px">
+        <button class="${giftDetailSort==='amount'?'on':''}" onclick="giftDetailSort='amount';refreshGiftDetail()">依金額</button>
+        <button class="${giftDetailSort==='table'?'on':''}" onclick="giftDetailSort='table';refreshGiftDetail()">依桌次</button>
+      </div>
+      <button class="btn-sm btn-ghost" style="border:1px solid var(--line);border-radius:9px;padding:9px 13px" onclick="exportGiftCSV()">⬇ 匯出</button>
+    </div>
+    <div id="gdList">${rows}</div>
+    <button class="btn btn-ghost" style="margin-top:14px" onclick="closeSheet()">關閉</button>`;
+}
+function refreshGiftDetail(){ if(modalEl){ const p=modalEl.querySelector(".sheet-pad"); if(p)p.innerHTML=giftDetailHTML(); } }
+function bindGiftDetail(){}
+function exportGiftCSV(){
+  const gs=guestList().filter(g=>g.arrived).sort(byTableThenName);
+  if(!gs.length){ toast("沒有資料"); return; }
+  let csv="姓名,桌次,人數,禮金,報到人員,報到時間\n";
+  gs.forEach(g=>{ csv+=[g.name,g.table?tableName(g.table):"",g.partySize||1,Number(g.giftAmount)||0,g.checkinBy||"",g.arrivedTime?timeStr(g.arrivedTime):""]
+    .map(x=>`"${String(x).replace(/"/g,'""')}"`).join(",")+"\n"; });
+  const total=gs.reduce((s,g)=>s+(Number(g.giftAmount)||0),0);
+  csv+=`"合計","","","${total}","",""\n`;
+  downloadFile("禮金明細.csv","\uFEFF"+csv,"text/csv"); toast("已匯出禮金明細");
 }
 
 /* ============================================================
@@ -693,6 +785,10 @@ function bindCheckin(){
 /* ---- 報到彈窗 ---- */
 const QUICK_AMTS_1=[1200,1600,1800,2000,2200,2600,2800,3200,3600];
 const QUICK_AMTS_2=[5200,6000,8000,8800,10000,12000];
+function refreshGiftBtns(){
+  const v=Number(($("#giftIn")||{}).value)||0;
+  document.querySelectorAll(".qa").forEach(b=>b.classList.toggle("sel", v>0 && Number(b.dataset.amt)===v));
+}
 function openCheckin(id){
   const g=App.state.guests[id]; if(!g)return;
   let gift=g.giftAmount||"";
@@ -735,11 +831,11 @@ function openCheckin(id){
       <input id="giftIn" type="number" inputmode="numeric" placeholder="0" value="${gift}">
     </div>
     <div class="quick-amt">
-      ${QUICK_AMTS_1.map(a=>`<button onclick="setGift(${a})">${a.toLocaleString()}</button>`).join("")}
+      ${QUICK_AMTS_1.map(a=>`<button class="qa" data-amt="${a}" onclick="setGift(${a})">${a.toLocaleString()}</button>`).join("")}
     </div>
     <div class="quick-divider"></div>
     <div class="quick-amt">
-      ${QUICK_AMTS_2.map(a=>`<button onclick="setGift(${a})">${a.toLocaleString()}</button>`).join("")}
+      ${QUICK_AMTS_2.map(a=>`<button class="qa" data-amt="${a}" onclick="setGift(${a})">${a.toLocaleString()}</button>`).join("")}
       <button onclick="setGift(0)" style="color:var(--muted)">清除</button>
     </div>
 
@@ -756,7 +852,10 @@ function openCheckin(id){
   const tog=$("#ckTog");
   if(tog){ tog.onclick=()=>{ cookieGiven=!cookieGiven; tog.classList.toggle("on",cookieGiven);
     const l=$("#ckLbl"); if(l) l.textContent=cookieGiven?"✓ 喜餅已交付":"切換上方開關標記已交付"; }; }
-  window.setGift=(a)=>{ $("#giftIn").value=a||""; };
+  window.setGift=(a)=>{ $("#giftIn").value=a||""; refreshGiftBtns(); };
+  const giftInEl=$("#giftIn");
+  if(giftInEl){ giftInEl.oninput=refreshGiftBtns; }
+  refreshGiftBtns();
   window.confirmCheckin=(gid)=>{
     if(!App.operator){ toast("請先在右上角選擇操作人員"); showIdentify(); return; }
     const amt=Number($("#giftIn").value)||0;
@@ -1282,7 +1381,8 @@ function fireConfetti(canvas, parent){
    操作紀錄 Audit Log
    ============================================================ */
 let logFilter="all", logSearch="";
-const LOG_TYPES={all:"全部",in:"報到",ed:"賓客異動",un:"取消/刪除",lt:"抽獎"};
+const LOG_TYPES={all:"全部",checkin:"報到 / 取消",ed:"賓客異動",lt:"抽獎"};
+const LOG_MATCH={all:()=>true, checkin:l=>l.type==="in"||l.type==="un", ed:l=>l.type==="ed", lt:l=>l.type==="lt"};
 function viewAudit(){
   const logs=(App.state.logs||[]);
   return `
@@ -1301,7 +1401,7 @@ function viewAudit(){
 function renderLogList(){
   let logs=[...(App.state.logs||[])].reverse();
   const q=logSearch.trim().toLowerCase();
-  if(logFilter!=="all") logs=logs.filter(l=>l.type===logFilter);
+  if(logFilter!=="all") logs=logs.filter(LOG_MATCH[logFilter]||(()=>true));
   if(q) logs=logs.filter(l=>(l.target||"").toLowerCase().includes(q)||(l.op||"").toLowerCase().includes(q));
   if(!logs.length) return emptyBox("📋","還沒有符合的紀錄","操作報到或修改資料後,就會出現在這裡");
   const badge={in:"in",ed:"ed",un:"un",lt:"lt"};
