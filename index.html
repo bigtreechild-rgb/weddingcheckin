@@ -195,6 +195,9 @@ main{max-width:760px;margin:0 auto;padding:16px 14px 24px}
 .sheet{background:var(--paper);width:100%;max-width:560px;border-radius:22px 22px 0 0;max-height:92vh;overflow-y:auto;animation:sheetup .28s cubic-bezier(.2,.9,.3,1);padding-bottom:env(safe-area-inset-bottom)}
 @keyframes sheetup{from{transform:translateY(100%)}to{transform:none}}
 .sheet-grab{width:40px;height:4px;background:var(--line);border-radius:3px;margin:10px auto 4px}
+.sheet-top{position:sticky;top:0;z-index:8;background:var(--paper);border-radius:22px 22px 0 0;padding-bottom:4px}
+.sheet-close{position:absolute;top:9px;right:13px;width:34px;height:34px;border-radius:50%;background:var(--ivory);border:1px solid var(--line);font-size:16px;color:var(--muted);display:flex;align-items:center;justify-content:center;z-index:9}
+.sheet-close:active{background:var(--line)}
 .sheet-pad{padding:8px 20px 22px}
 .sheet-head{text-align:center;padding:8px 0 16px;border-bottom:1px solid var(--line);margin-bottom:16px}
 .sheet-head .nm{font-family:"Noto Serif TC",serif;font-size:24px;font-weight:600}
@@ -318,7 +321,7 @@ select.inp:focus,input.inp:focus,textarea.inp:focus{border-color:var(--gold);box
   <div class="hd-row">
     <div>
       <div class="hd-names">吳宇童 <span class="hd-heart">❤</span> 劉懷筑</div>
-      <div class="hd-sub" id="hdVenue">WEDDING CHECK-IN · 高雄</div>
+      <div class="hd-sub" id="hdVenue">WEDDING CHECK-IN · 基隆</div>
     </div>
     <div class="hd-right">
       <button class="op-chip" id="opChip" onclick="showIdentify()"><span>👤</span><span id="opTxt">選擇身分</span></button>
@@ -500,6 +503,12 @@ function setOperator(name){
   try{ name?localStorage.setItem(OP_KEY,name):localStorage.removeItem(OP_KEY); }catch(e){}
   refreshOpUI(); closeSheet();
   if(name) toast(`目前操作人員:${name}`);
+}
+function requireOp(){
+  if(App.operator) return true;
+  toast("請先選擇操作身分才能操作");
+  showIdentify();
+  return false;
 }
 
 /* ============================================================
@@ -952,6 +961,7 @@ function quickAddTables(){
   segBind("qtFmt");
 }
 function doQuickAdd(){
+  if(!requireOp())return;
   const n=Math.min(60,Math.max(1,parseInt($("#qtCount").value)||0));
   const fmt=$("#qtFmt").dataset.sel||"第N桌";
   const cap=Number($("#qtCap").value)||null;
@@ -977,6 +987,7 @@ function openTableEdit(id){
     </div>`);
 }
 function saveTable(id){
+  if(!requireOp())return;
   const name=$("#tName").value.trim(); if(!name){ toast("請輸入桌次名稱"); return; }
   const cap=Number($("#tCap").value)||null; const note=$("#tNote").value.trim();
   App.commit(s=>{
@@ -986,6 +997,7 @@ function saveTable(id){
   closeSheet(); toast("已儲存");
 }
 function delTable(id){
+  if(!requireOp())return;
   if(!confirm("刪除這桌?該桌賓客會回到待排桌區。")) return;
   App.commit(s=>{ guestList().forEach(g=>{ if(g.table===id) s.guests[g.id].table=null; }); delete s.tables[id]; });
   closeSheet(); toast("已刪除桌次");
@@ -1116,6 +1128,7 @@ function collectCompanions(){
   return [...list.querySelectorAll(".comp-name")].map(i=>i.value.trim());
 }
 function saveGuest(id){
+  if(!requireOp())return;
   const name=$("#gName").value.trim(); if(!name){ toast("請輸入主賓客姓名"); return; }
   const side=$("#gSide").dataset.sel||"共同";
   const companions=collectCompanions();
@@ -1129,7 +1142,7 @@ function saveGuest(id){
   });
   closeSheet(); toast("已儲存");
 }
-function delGuest(id){ if(!confirm("確定刪除這位賓客?")) return; const nm=App.state.guests[id]?App.state.guests[id].name:""; App.commit(s=>{ delete s.guests[id]; pushLog(s,"刪除賓客","un",nm,""); }); closeSheet(); toast("已刪除"); }
+function delGuest(id){ if(!requireOp())return; if(!confirm("確定刪除這位賓客?")) return; const nm=App.state.guests[id]?App.state.guests[id].name:""; App.commit(s=>{ delete s.guests[id]; pushLog(s,"刪除賓客","un",nm,""); }); closeSheet(); toast("已刪除"); }
 
 /* ---- 合併家人:把分開的數筆併成一組(主賓客＋同行人) ---- */
 let mergeSel=[];
@@ -1179,6 +1192,7 @@ function updateMergeUI(){
   if(btn){ const ok=mergeSel.length>=2; btn.disabled=!ok; btn.style.opacity=ok?"1":"0.45"; }
 }
 function doMerge(){
+  if(!requireOp())return;
   if(mergeSel.length<2)return;
   const [mainId,...rest]=mergeSel;
   const mainName=App.state.guests[mainId]?App.state.guests[mainId].name:"";
@@ -1213,6 +1227,7 @@ function openBulkImport(){
     <div class="btn-row"><button class="btn btn-ghost" onclick="closeSheet()">取消</button><button class="btn btn-primary" onclick="doBulkImport()">匯入</button></div>`);
 }
 function doBulkImport(){
+  if(!requireOp())return;
   const lines=$("#bulkTxt").value.split("\n").map(l=>l.trim()).filter(Boolean);
   if(!lines.length){ toast("沒有可匯入的資料"); return; }
   let count=0;
@@ -1443,7 +1458,7 @@ function viewSettings(){
 
   <div class="card pad set-block">
     <div class="field-lbl" style="margin-top:0">婚宴資訊(顯示於頂端)</div>
-    <input class="inp" id="setVenue" value="${esc(App.state.meta.venue||'WEDDING CHECK-IN · 高雄')}" placeholder="例如 高雄晶綺盛宴 台鋁館">
+    <input class="inp" id="setVenue" value="${esc(App.state.meta.venue||'WEDDING CHECK-IN · 基隆')}" placeholder="例如 基隆 ○○ 餐廳·宴會廳">
     <button class="btn btn-ghost btn-sm" style="margin-top:10px" onclick="saveMeta()">更新</button>
   </div>
 
@@ -1503,7 +1518,7 @@ function importJSON(e){
   }catch(err){ toast("讀取失敗"); } };
   r.readAsText(file); e.target.value="";
 }
-function clearAll(){ if(!confirm("確定清除所有賓客、桌次與抽獎資料?此動作無法復原。")) return;
+function clearAll(){ if(!requireOp())return; if(!confirm("確定清除所有賓客、桌次與抽獎資料?此動作無法復原。")) return;
   if(!confirm("再次確認:真的要全部清除嗎?")) return;
   App.commit(s=>{ s.guests={}; s.tables={}; s.lottery={winners:[]}; pushLog(s,"清除所有資料","un","",""); }); toast("已清除"); }
 
@@ -1514,7 +1529,7 @@ function openSheet(html){
   closeSheet();
   modalEl=document.createElement("div");
   modalEl.className="overlay";
-  modalEl.innerHTML=`<div class="sheet"><div class="sheet-grab"></div><div class="sheet-pad">${html}</div></div>`;
+  modalEl.innerHTML=`<div class="sheet"><div class="sheet-top"><div class="sheet-grab"></div><button class="sheet-close" onclick="closeSheet()" aria-label="關閉">✕</button></div><div class="sheet-pad">${html}</div></div>`;
   modalEl.addEventListener("click",e=>{ if(e.target===modalEl) closeSheet(); });
   document.body.appendChild(modalEl);
 }
